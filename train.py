@@ -13,17 +13,21 @@ from unet import UNet
 from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch
 
 def train_net(net,
+              train_dir=None,
+              groundtruth_dir=None,
+              weight_dir=None,
+              weight_name='DeepInsthink',
+              val_percent=0.05,
               epochs=5,
               batch_size=1,
               lr=0.1,
-              val_percent=0.05,
               save_cp=True,
               gpu=False,
               img_scale=0.5):
 
-    dir_img = 'data/train/'
-    dir_mask = 'data/train_masks/'
-    dir_checkpoint = 'checkpoints/'
+    dir_img = train_dir
+    dir_mask = groundtruth_dir
+    dir_checkpoint = weight_dir
 
     ids = get_ids(dir_img)
     ids = split_ids(ids)
@@ -51,6 +55,8 @@ def train_net(net,
 
     criterion = nn.BCELoss()
 
+    max_DSC = 0;
+    max_ep_checkpoint = 0;
     for epoch in range(epochs):
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         net.train()
@@ -60,6 +66,7 @@ def train_net(net,
         val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale)
 
         epoch_loss = 0
+        batchN = 0;
 
         for i, b in enumerate(batch(train, batch_size)):
             imgs = np.array([i[0] for i in b]).astype(np.float32)
@@ -80,30 +87,39 @@ def train_net(net,
             loss = criterion(masks_probs_flat, true_masks_flat)
             epoch_loss += loss.item()
 
-            print('{0:.4f} --- loss: {1:.6f}'.format(i * batch_size / N_train, loss.item()))
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        print('Epoch finished ! Loss: {}'.format(epoch_loss / i))
-
-        if 1:
-            val_dice = eval_net(net, val, gpu)
-            print('Validation Dice Coeff: {}'.format(val_dice))
-
+            print('ep: {3:.0f} batch [{0:.0f}/{1:.0f}] - loss: {2:.6f}'.format(i + 1, N_train / batch_size, loss.item(), epoch + 1))
+            #if (i % 5==0):
+            #    val_dice = eval_net(net, val, gpu)
+            #    print('Validation Dice Coeff: {}'.format(val_dice))
+        val_dice = eval_net(net, val, gpu)
+        print('Epoch {0:} -- Loss: {1:} -- Validation DSC: {2:}'.format(epoch, epoch_loss / i, val_dice))
+        if(val_dice>=max_DSC):
+            max_DSC = val_dice
+            max_ep_checkpoint = epoch + 1
         if save_cp:
             torch.save(net.state_dict(),
-                       dir_checkpoint + 'CP{}.pth'.format(epoch + 1))
+                       dir_checkpoint + weight_name + '-{}.pth'.format(epoch + 1))
             print('Checkpoint {} saved !'.format(epoch + 1))
-
-
-
+    print('Maximum checkpoint is ' + weight_name + '-{0:}' + 'with {1:} DSC' .format(max_ep_checkpoint,max_DSC))
 def get_args():
     parser = OptionParser()
+    parser.add_option('-t', '--train-dir', dest='train_dir', default='E:/projects/matconvnet/data/data_hatiku_padamu/retraining/AClean3D/', type='str',
+                      help='training directory (no space)')
+    parser.add_option('-o', '--groundtruth-dir', dest='groundtruth_dir', default='E:/projects/matconvnet/data/data_hatiku_padamu/retraininglabel/ACleanGIF/', type='str',
+                      help='groundtruth directory (nospace)')
+    parser.add_option('-w', '--weight-dir', dest='weight_dir', default='E:/projects/pytorch/Pytorch-UNet/weightLiver/', type='str',
+                      help='weight directory (nospace)')
+    parser.add_option('-n', '--weight-name', dest='weight_name', default='Liver', type='str',
+                      help='weight name')
+    parser.add_option('-v', '--val-percent', dest='val_percent', default=0.01, type='float',
+                      help='number of epochs')
     parser.add_option('-e', '--epochs', dest='epochs', default=5, type='int',
                       help='number of epochs')
-    parser.add_option('-b', '--batch-size', dest='batchsize', default=10,
+    parser.add_option('-b', '--batch-size', dest='batchsize', default=4,
                       type='int', help='batch size')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
                       type='float', help='learning rate')
@@ -132,6 +148,11 @@ if __name__ == '__main__':
 
     try:
         train_net(net=net,
+                  train_dir=args.train_dir,
+                  groundtruth_dir=args.groundtruth_dir,
+                  weight_dir=args.weight_dir,
+                  weight_name=args.weight_name,
+                  val_percent=args.val_percent,
                   epochs=args.epochs,
                   batch_size=args.batchsize,
                   lr=args.lr,

@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from PIL import Image
 
 from unet import UNet
-from utils import resize_and_crop, normalize, split_img_into_squares, hwc_to_chw, merge_masks, dense_crf
+from utils import resize_and_crop, normalize, split_img_into_squares, hwc_to_chw, merge_masks
+#, dense_crf
 from utils import plot_img_and_mask
 
 from torchvision import transforms
@@ -17,8 +18,8 @@ def predict_img(net,
                 full_img,
                 scale_factor=0.5,
                 out_threshold=0.5,
-                use_dense_crf=True,
-                use_gpu=False):
+                use_dense_crf=False,
+                use_gpu=True):
 
     net.eval()
     img_height = full_img.size[1]
@@ -62,8 +63,8 @@ def predict_img(net,
 
     full_mask = merge_masks(left_mask_np, right_mask_np, img_width)
 
-    if use_dense_crf:
-        full_mask = dense_crf(np.array(full_img).astype(np.uint8), full_mask)
+    #if use_dense_crf:
+    #    full_mask = dense_crf(np.array(full_img).astype(np.uint8), full_mask)
 
     return full_mask > out_threshold
 
@@ -91,7 +92,7 @@ def get_args():
                         default=False)
     parser.add_argument('--no-crf', '-r', action='store_true',
                         help="Do not use dense CRF postprocessing",
-                        default=False)
+                        default=True)
     parser.add_argument('--mask-threshold', '-t', type=float,
                         help="Minimum probability value to consider a mask pixel white",
                         default=0.5)

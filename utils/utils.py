@@ -1,7 +1,6 @@
 import random
 import numpy as np
 
-
 def get_square(img, pos):
     """Extract a left or a right square from ndarray shape : (H, W, C))"""
     h = img.shape[0]
